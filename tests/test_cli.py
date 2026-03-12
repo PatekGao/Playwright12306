@@ -27,6 +27,31 @@ def test_build_parser_accepts_limit_trains() -> None:
     assert args.limit_trains == 5
 
 
+def test_build_parser_accepts_artifacts_dir() -> None:
+    parser = build_parser()
+    args = parser.parse_args(
+        ["--query-date", "2026-03-20", "--artifacts-dir", "/tmp/12306-artifacts"]
+    )
+    assert args.artifacts_dir == "/tmp/12306-artifacts"
+
+
+def test_main_dry_run_uses_custom_artifacts_dir(capsys) -> None:
+    assert (
+        main(
+            [
+                "--query-date",
+                "2026-03-20",
+                "--dry-run",
+                "--artifacts-dir",
+                "/tmp/12306-artifacts",
+            ]
+        )
+        == 0
+    )
+    captured = capsys.readouterr()
+    assert "/tmp/12306-artifacts" in captured.out
+
+
 def test_script_invocation_succeeds_for_dry_run() -> None:
     root = Path(__file__).resolve().parents[1]
     script = root / "scripts" / "fetch_national_trains.py"

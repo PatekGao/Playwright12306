@@ -73,6 +73,7 @@ class AppConfig:
     force: bool = False
     timeout_seconds: int = 20
     limit_trains: int | None = None
+    show_progress: bool = True
 
 
 def validate_query_date(query_date: str) -> str:

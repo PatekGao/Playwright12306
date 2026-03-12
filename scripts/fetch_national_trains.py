@@ -34,6 +34,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Fetch only the first N train seeds, useful for quick verification.",
     )
+    parser.add_argument(
+        "--artifacts-dir",
+        default=None,
+        help="Custom directory for raw data, normalized outputs, and state files.",
+    )
     return parser
 
 
@@ -42,7 +47,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     args = build_parser().parse_args(argv)
     query_date = validate_query_date(args.query_date)
-    paths = AppPaths.from_root(PROJECT_ROOT)
+    artifacts_dir = Path(args.artifacts_dir).expanduser() if args.artifacts_dir else None
+    paths = AppPaths.from_root(PROJECT_ROOT, artifacts_dir=artifacts_dir)
     if args.dry_run:
         print(f"[dry-run] query_date={query_date}")
         print(f"[dry-run] artifacts_dir={paths.artifacts}")

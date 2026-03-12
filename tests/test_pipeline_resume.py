@@ -1,7 +1,11 @@
 import json
 
 from playwright12306.left_ticket import LeftTicketRow
-from playwright12306.pipeline import build_train_output_row, should_skip_done_item
+from playwright12306.pipeline import (
+    build_train_output_row,
+    format_progress_message,
+    should_skip_done_item,
+)
 from playwright12306.train_info import TrainSummary
 
 
@@ -9,6 +13,11 @@ def test_should_skip_done_item() -> None:
     done = {"24000000G10L"}
     assert should_skip_done_item("24000000G10L", done) is True
     assert should_skip_done_item("24000000G520", done) is False
+
+
+def test_format_progress_message_includes_stage_count_and_detail() -> None:
+    message = format_progress_message("train_info", 3, 10, "G123")
+    assert message == "[progress] train_info 3/10 G123"
 
 
 def test_build_train_output_row_includes_structured_prices() -> None:
@@ -42,4 +51,6 @@ def test_build_train_output_row_includes_structured_prices() -> None:
     row = build_train_output_row(summary=summary, price_source=price_source)
     prices = json.loads(row["seat_price_json"])
     assert row["train_no"] == "24000000G520"
+    assert row["train_code"] == "G5"
+    assert row["station_train_code"] == "G5"
     assert prices[0]["name"] == "二等座"

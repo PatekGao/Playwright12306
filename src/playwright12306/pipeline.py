@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -64,6 +65,13 @@ def should_skip_done_item(key: str, done: set[str]) -> bool:
     return key in done
 
 
+def format_progress_message(stage: str, current: int, total: int, detail: str = "") -> str:
+    """Format one human-readable progress message."""
+
+    suffix = f" {detail}" if detail else ""
+    return f"[progress] {stage} {current}/{total}{suffix}"
+
+
 def build_train_output_row(
     *,
     summary: TrainSummary,
@@ -84,6 +92,7 @@ def build_train_output_row(
     return {
         "query_date": summary.query_date,
         "train_no": summary.train_no,
+        "train_code": summary.station_train_code,
         "station_train_code": summary.station_train_code,
         "train_class_name": summary.train_class_name or train_type,
         "start_station_name": summary.start_station_name,
@@ -137,6 +146,7 @@ class NationwideTrainPipeline:
         seeds = parse_train_seed(seeds_payload, self.config.query_date)
         if self.config.limit_trains is not None:
             seeds = seeds[: self.config.limit_trains]
+        self._emit_progress("train_seed", len(seeds), len(seeds), f"query_date={self.config.query_date}")
 
         schedule_results = self._collect_train_info(seeds)
         summaries = [item.summary for item in schedule_results]
@@ -178,7 +188,9 @@ class NationwideTrainPipeline:
     def _collect_train_info(self, seeds: list[TrainSeed]) -> list[TrainInfoResult]:
         done = set() if self.config.force else load_done_keys(self.config.paths.train_info_done)
         results: list[TrainInfoResult] = []
-        for seed in seeds:
+        total = len(seeds)
+        for index, seed in enumerate(seeds, start=1):
+            self._emit_progress("train_info", index, total, seed.station_train_code)
             raw_path = self.config.paths.train_info_raw / f"{seed.train_no}.json"
             payload: dict | None = None
             if should_skip_done_item(seed.train_no, done) and raw_path.exists():
@@ -223,6 +235,8 @@ class NationwideTrainPipeline:
         route_cache: dict[str, dict[str, LeftTicketRow]] = {}
         if not summaries:
             return price_sources, route_rows
+        route_total = len(self._build_unique_route_keys(summaries, station_name_index))
+        route_index = 0
 
         try:
             bootstrap_left_ticket_session(
@@ -246,6 +260,8 @@ class NationwideTrainPipeline:
 
             route_key = f"{from_code}_{to_code}"
             if route_key not in route_cache:
+                route_index += 1
+                self._emit_progress("left_ticket", route_index, route_total, route_key)
                 raw_path = self.config.paths.left_ticket_raw / f"{route_key}.json"
                 payload: dict | None = None
                 if should_skip_done_item(route_key, done) and raw_path.exists():
@@ -302,6 +318,25 @@ class NationwideTrainPipeline:
                 price_sources[summary.train_no] = price_source
         return price_sources, route_rows
 
+    def _build_unique_route_keys(
+        self,
+        summaries: list[TrainSummary],
+        station_name_index: dict[str, str],
+    ) -> list[str]:
+        keys: list[str] = []
+        seen: set[str] = set()
+        for summary in summaries:
+            from_code = station_name_index.get(summary.start_station_name, "")
+            to_code = station_name_index.get(summary.end_station_name, "")
+            if not from_code or not to_code:
+                continue
+            route_key = f"{from_code}_{to_code}"
+            if route_key in seen:
+                continue
+            seen.add(route_key)
+            keys.append(route_key)
+        return keys
+
     def _wrap_raw_record(
         self,
         *,
@@ -332,3 +367,8 @@ class NationwideTrainPipeline:
     @staticmethod
     def _now_iso() -> str:
         return datetime.now(timezone.utc).isoformat()
+
+    def _emit_progress(self, stage: str, current: int, total: int, detail: str = "") -> None:
+        if not self.config.show_progress or total <= 0:
+            return
+        print(format_progress_message(stage, current, total, detail), file=sys.stderr, flush=True)
