@@ -9,6 +9,7 @@
 - 将原始响应和标准化结果落盘到本地 `artifacts/`
 - 支持把 `artifacts/<date>/normalized` 导入本地 `SQLite`
 - 提供 `FastAPI + Vue 3` 的本地检索工具，支持结构化筛选、详情查看和导出
+- 提供 `实时查询子系统`，支持 CLI 和 Vue 前端直接向 12306 发起查询
 
 注意：仓库名里有 `Playwright`，但当前实现并不依赖 Playwright 浏览器自动化；这是此前方案收敛后保留的项目名。现阶段价格层已实现，`余票/可售状态` 仅作为可选附带字段，不保证完整。
 
@@ -26,6 +27,7 @@
 - 不保证全国所有车次都能命中价格快照
 - 不保证 `sale_status`、`can_web_buy`、`seat_inventory_json` 全量可用
 - 不包含 Playwright 浏览器态获取、验证码处理、登录态管理
+- 实时模式不保证绕过 12306 风控；若上游返回 HTML 错页或异常结构，会作为部分失败返回
 
 ## 项目结构
 
@@ -155,6 +157,90 @@ npm run dev
 cd web
 npm run build
 ```
+
+## 实时查询
+
+实时查询不会使用本地 SQLite 结果，而是每次都直接请求 12306。
+
+### 实时 CLI
+
+双头区间查询：
+
+```bash
+python3 scripts/query_realtime_tickets.py \
+  --date 2026-03-18 \
+  --from-station 杭州东 \
+  --to-station 上海虹桥 \
+  --detail
+```
+
+日期范围查询：
+
+```bash
+python3 scripts/query_realtime_tickets.py \
+  --date-from 2026-03-18 \
+  --date-to 2026-03-20 \
+  --from-station 杭州东 \
+  --to-station 上海虹桥 \
+  --format json
+```
+
+单头慢查询：
+
+```bash
+python3 scripts/query_realtime_tickets.py \
+  --date 2026-03-18 \
+  --from-station 济南西 \
+  --train-code G1 \
+  --detail
+```
+
+注意：
+- 双头区间模式返回准确区间价格与余票
+- 单头模式只返回时刻与经停上下文，不返回票价与余票
+- 日期跨度最大 `7` 天
+
+### 实时 API
+
+启动 API 服务：
+
+```bash
+python3 scripts/run_query_api.py \
+  --db-path data/train_search.db \
+  --host 127.0.0.1 \
+  --port 8000
+```
+
+实时接口包括：
+- `GET /api/realtime/meta/stations`
+- `POST /api/realtime/jobs`
+- `GET /api/realtime/jobs/{job_id}`
+- `GET /api/realtime/jobs/{job_id}/events`
+- `GET /api/realtime/jobs/{job_id}/export`
+- `GET /api/realtime/trains/{query_date}/{train_no}`
+
+示例：
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/realtime/jobs \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "date":"2026-03-18",
+    "from_station_name":"杭州东",
+    "to_station_name":"上海虹桥"
+  }'
+```
+
+### 实时前端
+
+开发模式下：
+- 仍然使用 `npm run dev`
+- 新页面路由是 `http://127.0.0.1:5173/realtime`
+
+构建后：
+- `python3 scripts/run_query_api.py` 会自动挂载 `web/dist`
+- 同一个 FastAPI 进程可同时提供 API 和静态前端
+- 如果服务监听 `0.0.0.0`，局域网设备可以直接访问
 
 ## 输出结果
 

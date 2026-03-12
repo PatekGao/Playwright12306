@@ -57,7 +57,7 @@ def request_json(
         timeout=timeout_seconds,
     )
     response.raise_for_status()
-    text = response.text.lstrip()
+    text = response.text.lstrip("\ufeff\r\n\t ")
     if text.startswith("<!DOCTYPE") or text.startswith("<html"):
         snippet = text[:120].replace("\n", " ")
         raise ValueError(f"expected JSON but received HTML: {snippet}")

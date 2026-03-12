@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import requests
 
@@ -29,7 +29,15 @@ class LeftTicketRow:
     can_web_buy: str
     yp_info_new: str
     seat_types: str
+    raw_parts: tuple[str, ...] = field(default_factory=tuple)
     sale_status: str = ""
+
+    def part(self, index: int) -> str:
+        """Return one raw row part safely."""
+
+        if index < 0 or index >= len(self.raw_parts):
+            return ""
+        return self.raw_parts[index].strip()
 
 
 def parse_left_ticket_row(row: str) -> LeftTicketRow:
@@ -51,6 +59,7 @@ def parse_left_ticket_row(row: str) -> LeftTicketRow:
 
     return LeftTicketRow(
         raw_row=row,
+        raw_parts=tuple(parts),
         train_no=parts[2].strip(),
         station_train_code=parts[3].strip(),
         start_station_code=parts[4].strip(),

@@ -85,6 +85,9 @@ def test_search_api_detail_and_export_endpoints(tmp_path) -> None:
         params={"query_date": "2026-03-18", "format": "csv"},
     )
     assert exported_csv.status_code == 200
+    assert exported_csv.content.startswith(b"\xef\xbb\xbf")
+    assert "filename*=UTF-8''" in exported_csv.headers["content-disposition"]
+    assert "2026-03-18" in exported_csv.headers["content-disposition"]
     assert "train_code" in exported_csv.text
     assert "G1" in exported_csv.text
 

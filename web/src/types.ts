@@ -109,3 +109,179 @@ export interface SearchFilters {
   sort_by: SortBy;
   sort_order: SortOrder;
 }
+
+export interface RealtimeMetaStations {
+  stations: string[];
+  cities: string[];
+}
+
+export interface RealtimeSeatOffer {
+  seat_code: string;
+  seat_name: string;
+  price: number | null;
+  inventory_text: string;
+  is_available: boolean;
+}
+
+export interface RealtimeDailyItem {
+  query_date: string;
+  train_no: string;
+  train_code: string;
+  train_class_name: string;
+  start_station_name: string;
+  end_station_name: string;
+  query_scope?: "station" | "city";
+  from_station_name?: string;
+  to_station_name?: string;
+  matched_from_station_name?: string;
+  matched_to_station_name?: string;
+  matched_station_name?: string;
+  matched_station_no?: string;
+  matched_arrive_time?: string;
+  matched_depart_time?: string;
+  depart_time: string;
+  arrive_time: string;
+  duration: string;
+  arrive_day_diff?: number | string;
+  sale_status: string;
+  can_web_buy: string;
+  route_signature: string;
+  matched_route_signature?: string;
+  seat_offers: RealtimeSeatOffer[];
+  min_price: number | null;
+  stop_count?: number;
+  detail_available?: boolean;
+}
+
+export interface RealtimeDailySummary {
+  matched_train_count: number;
+  available_train_count: number;
+  cheapest_available_price: number | null;
+  fastest_duration: string | null;
+}
+
+export interface RealtimeDailyResult {
+  query_date: string;
+  items: RealtimeDailyItem[];
+  summary: RealtimeDailySummary;
+  failure: string | null;
+}
+
+export interface RealtimeAggregatedResult {
+  train_code: string;
+  train_class_name: string;
+  start_station_name: string;
+  end_station_name: string;
+  query_mode: "route" | "single_head";
+  query_scope?: "station" | "city";
+  route_signature: string;
+  matched_route_signature?: string;
+  matched_from_station_name?: string;
+  matched_to_station_name?: string;
+  matched_station_name: string;
+  available_days: number;
+  sold_out_days: number;
+  first_seen_date: string;
+  last_seen_date: string;
+  min_price: number | null;
+  max_price: number | null;
+  sample_depart_time: string;
+  sample_arrive_time: string;
+  sample_duration: string;
+}
+
+export interface RealtimeSummary {
+  total_days: number;
+  successful_days: number;
+  failed_days: number;
+  available_train_count: number;
+  cheapest_available_price: number | null;
+  fastest_duration: string | null;
+  matched_train_count: number;
+}
+
+export interface RealtimePartialFailure {
+  query_date: string;
+  stage: string;
+  error_type: string;
+  message: string;
+}
+
+export interface RealtimeQueryRequest {
+  date?: string;
+  date_from?: string;
+  date_to?: string;
+  from_station_name?: string;
+  to_station_name?: string;
+  train_code?: string;
+  train_class_name?: string;
+  query_mode?: "route" | "single_head";
+  query_scope?: "station" | "city";
+}
+
+export interface RealtimeQueryResult {
+  request: {
+    date_from: string;
+    date_to: string;
+    query_mode: "route" | "single_head";
+    query_scope: "station" | "city";
+    from_station_name: string;
+    to_station_name: string;
+    train_code: string;
+    train_class_name: string;
+  };
+  daily_results: RealtimeDailyResult[];
+  aggregated_results: RealtimeAggregatedResult[];
+  partial_failures: RealtimePartialFailure[];
+  summary: RealtimeSummary;
+}
+
+export interface RealtimeJobResponse {
+  job_id: string;
+  status: "queued" | "running" | "completed" | "failed";
+  created_at: string;
+  updated_at: string;
+  request: RealtimeQueryResult["request"];
+  result: RealtimeQueryResult | null;
+  error: string | null;
+}
+
+export interface RealtimeJobCreatedResponse {
+  job_id: string;
+  status: "queued" | "running" | "completed" | "failed";
+  request: RealtimeQueryResult["request"];
+}
+
+export interface RealtimeJobEvent {
+  event: string;
+  timestamp: string;
+  message?: string;
+  query_date?: string;
+  query_mode?: string;
+  total_days?: number;
+  matched_train_count?: number;
+  train_code?: string;
+  error_type?: string;
+}
+
+export interface RealtimeTrainDetail {
+  train: {
+    query_date: string;
+    train_no: string;
+    train_code: string;
+    train_class_name: string;
+    start_station_name: string;
+    end_station_name: string;
+    depart_time: string;
+    arrive_time: string;
+    duration: string;
+    arrive_day_diff: string;
+    from_station_name?: string;
+    to_station_name?: string;
+    sale_status?: string;
+    can_web_buy?: string;
+  };
+  stops: TrainStop[];
+  seat_offers: RealtimeSeatOffer[];
+  route_signature: string;
+}

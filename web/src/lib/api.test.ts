@@ -9,7 +9,7 @@ describe("api", () => {
     );
   });
 
-  it("falls back to local backend when running outside localhost", () => {
+  it("uses same-origin api paths by default", () => {
     vi.stubGlobal("window", {
       location: {
         hostname: "preview.example.com",
@@ -18,7 +18,7 @@ describe("api", () => {
       clearTimeout,
     });
 
-    expect(buildApiUrl("/api/meta/summary")).toBe("http://127.0.0.1:8000/api/meta/summary");
+    expect(buildApiUrl("/api/meta/summary")).toBe("/api/meta/summary");
   });
 
   it("uses configured api base for fetch requests", async () => {

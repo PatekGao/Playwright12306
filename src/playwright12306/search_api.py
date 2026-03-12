@@ -8,11 +8,18 @@ import json
 from pathlib import Path
 import sqlite3
 from typing import Any
+from urllib.parse import quote
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Body, Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
+from playwright12306.realtime import (
+    RealtimeJobManager,
+    RealtimeQueryError,
+    RealtimeQueryService,
+)
 from playwright12306.search_db import connect_db
 
 
@@ -25,7 +32,78 @@ SORT_COLUMN_MAP = {
 }
 
 
-def create_app(db_path: Path) -> FastAPI:
+def _sanitize_filename_part(value: str) -> str:
+    """Convert one user-facing value into a filename-safe token."""
+
+    text = (value or "").strip()
+    if not text:
+        return ""
+    for char in '\\/:*?"<>|':
+        text = text.replace(char, "-")
+    return text.replace(" ", "_")
+
+
+def _build_download_filename(stem: str, suffix: str = ".csv") -> str:
+    """Build a browser-friendly Content-Disposition header value."""
+
+    safe_stem = _sanitize_filename_part(stem) or "export"
+    fallback = f"{safe_stem.encode('ascii', 'ignore').decode('ascii') or 'export'}{suffix}"
+    utf8_name = f"{safe_stem}{suffix}"
+    return f"attachment; filename={json.dumps(fallback)}; filename*=UTF-8''{quote(utf8_name)}"
+
+
+def _build_realtime_export_filename(job: Any) -> str:
+    """Build a readable realtime export filename from one job request."""
+
+    request = job.request
+    stem_parts = [
+        "realtime",
+        request.get("date_from", ""),
+    ]
+    if request.get("date_to") and request.get("date_to") != request.get("date_from"):
+        stem_parts[-1] = f"{request['date_from']}_to_{request['date_to']}"
+    stem_parts.append("站点对" if request.get("query_scope") == "station" else "城市对")
+    stem_parts.append("区间" if request.get("query_mode") == "route" else "单头")
+    if request.get("from_station_name") or request.get("to_station_name"):
+        route_part = f"{request.get('from_station_name', '')}-{request.get('to_station_name', '')}".strip("-")
+        if route_part:
+            stem_parts.append(route_part)
+    if request.get("train_code"):
+        stem_parts.append(request["train_code"])
+    if request.get("train_class_name"):
+        stem_parts.append(request["train_class_name"])
+    return "_".join(part for part in stem_parts if part)
+
+
+def _build_train_export_filename(
+    *,
+    query_date: str,
+    train_code: str | None,
+    start_station_name: str | None,
+    end_station_name: str | None,
+    train_class_name: str | None,
+) -> str:
+    """Build a readable local-train export filename from active filters."""
+
+    stem_parts = ["trains", query_date]
+    if start_station_name or end_station_name:
+        route_part = f"{start_station_name or ''}-{end_station_name or ''}".strip("-")
+        if route_part:
+            stem_parts.append(route_part)
+    if train_code:
+        stem_parts.append(train_code)
+    if train_class_name:
+        stem_parts.append(train_class_name)
+    return "_".join(part for part in stem_parts if part)
+
+
+def create_app(
+    db_path: Path,
+    *,
+    realtime_service: RealtimeQueryService | None = None,
+    realtime_manager: RealtimeJobManager | None = None,
+    web_dist: Path | None = None,
+) -> FastAPI:
     """Create the FastAPI app bound to a local SQLite database."""
 
     app = FastAPI(title="12306 Local Search API")
@@ -36,6 +114,8 @@ def create_app(db_path: Path) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    service = realtime_service or RealtimeQueryService()
+    manager = realtime_manager or RealtimeJobManager(service)
 
     def get_connection() -> sqlite3.Connection:
         if not db_path.exists():
@@ -99,6 +179,75 @@ def create_app(db_path: Path) -> FastAPI:
             "stations": stations,
             "seat_names": seat_names,
         }
+
+    @app.get("/api/realtime/meta/stations")
+    def realtime_stations() -> dict[str, Any]:
+        try:
+            return {
+                "stations": service.list_station_names(),
+                "cities": service.list_city_names(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    @app.post("/api/realtime/jobs")
+    def create_realtime_job(payload: dict[str, Any] = Body(default_factory=dict)) -> dict[str, Any]:
+        try:
+            job = manager.create_job(payload)
+        except RealtimeQueryError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return {"job_id": job.job_id, "status": job.status, "request": job.request}
+
+    @app.get("/api/realtime/jobs/{job_id}")
+    def get_realtime_job(job_id: str) -> dict[str, Any]:
+        try:
+            return manager.get_job(job_id).serialize()
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="job not found") from exc
+
+    @app.get("/api/realtime/jobs/{job_id}/events")
+    def stream_realtime_events(job_id: str):
+        try:
+            iterator = manager.iter_events(job_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="job not found") from exc
+        return StreamingResponse(iterator, media_type="text/event-stream")
+
+    @app.get("/api/realtime/jobs/{job_id}/export")
+    def export_realtime_job(job_id: str, format: str = Query(default="csv")):
+        try:
+            payload, media_type = manager.export_job(job_id, format)
+            job = manager.get_job(job_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="job not found") from exc
+        except RealtimeQueryError as exc:
+            status_code = 409 if "not completed" in str(exc) else 422
+            raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+        headers = {}
+        if format == "csv":
+            headers["Content-Disposition"] = _build_download_filename(
+                _build_realtime_export_filename(job)
+            )
+        return StreamingResponse(iter([payload]), media_type=media_type, headers=headers)
+
+    @app.get("/api/realtime/trains/{query_date}/{train_no}")
+    def realtime_train_detail(
+        query_date: str,
+        train_no: str,
+        from_station_name: str | None = None,
+        to_station_name: str | None = None,
+    ) -> dict[str, Any]:
+        try:
+            return service.get_train_detail(
+                query_date=query_date,
+                train_no=train_no,
+                from_station_name=(from_station_name or "").strip(),
+                to_station_name=(to_station_name or "").strip(),
+            )
+        except RealtimeQueryError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     @app.get("/api/trains")
     def list_trains(
@@ -182,7 +331,7 @@ def create_app(db_path: Path) -> FastAPI:
         if format != "csv":
             raise HTTPException(status_code=422, detail="format must be csv or json")
         if not items:
-            header = "query_date,train_no,train_code,train_class_name,start_station_name,end_station_name,depart_time,arrive_time,duration,min_price,route_signature,sale_status\n"
+            header = "query_date,train_no,train_code,train_class_name,start_station_name,end_station_name,depart_time,arrive_time,duration,min_price,route_signature,sale_status\n".encode("utf-8-sig")
             return StreamingResponse(iter([header]), media_type="text/csv; charset=utf-8")
         csv_buffer = io.StringIO()
         fieldnames = list(items[0].keys())
@@ -195,9 +344,19 @@ def create_app(db_path: Path) -> FastAPI:
             }
             writer.writerow(row)
         return StreamingResponse(
-            iter([csv_buffer.getvalue()]),
+            iter([csv_buffer.getvalue().encode("utf-8-sig")]),
             media_type="text/csv; charset=utf-8",
-            headers={"Content-Disposition": f'attachment; filename="trains-{query_date}.csv"'},
+            headers={
+                "Content-Disposition": _build_download_filename(
+                    _build_train_export_filename(
+                        query_date=query_date,
+                        train_code=train_code,
+                        start_station_name=start_station_name,
+                        end_station_name=end_station_name,
+                        train_class_name=train_class_name,
+                    )
+                )
+            },
         )
 
     @app.get("/api/trains/{query_date}/{train_no}")
@@ -241,6 +400,23 @@ def create_app(db_path: Path) -> FastAPI:
             "seat_prices": seat_prices,
             "route_signature": train_row["route_signature"],
         }
+
+    resolved_web_dist = web_dist or Path(__file__).resolve().parents[2] / "web" / "dist"
+    if resolved_web_dist.exists():
+        assets_dir = resolved_web_dist / "assets"
+        if assets_dir.exists():
+            app.mount("/assets", StaticFiles(directory=assets_dir), name="web-assets")
+
+        @app.get("/", include_in_schema=False)
+        def spa_index():
+            return FileResponse(resolved_web_dist / "index.html")
+
+        @app.get("/{full_path:path}", include_in_schema=False)
+        def spa_catch_all(full_path: str):
+            candidate = resolved_web_dist / full_path
+            if candidate.is_file():
+                return FileResponse(candidate)
+            return FileResponse(resolved_web_dist / "index.html")
 
     return app
 

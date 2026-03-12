@@ -24,6 +24,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--db-path", default="data/train_search.db", help="SQLite database path.")
     parser.add_argument("--host", default="127.0.0.1", help="Bind host.")
     parser.add_argument("--port", type=int, default=8000, help="Bind port.")
+    parser.add_argument(
+        "--web-dist",
+        default="web/dist",
+        help="Built frontend directory to mount when present.",
+    )
     return parser
 
 
@@ -31,7 +36,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Run the FastAPI server."""
 
     args = build_parser().parse_args(argv)
-    app = create_app(Path(args.db_path).expanduser())
+    app = create_app(
+        Path(args.db_path).expanduser(),
+        web_dist=Path(args.web_dist).expanduser(),
+    )
     uvicorn.run(app, host=args.host, port=args.port)
     return 0
 

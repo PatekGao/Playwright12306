@@ -22,9 +22,12 @@ const latestDate = computed(() => data.value?.query_dates?.[0] ?? "");
       <p class="hero-copy">
         基于本地 SQLite 与 Vue 界面，快速筛选车次、查看停站、核对价格快照，并导出当前结果集。
       </p>
-      <RouterLink class="primary-button" :to="{ name: 'search', query: latestDate ? { query_date: latestDate } : {} }">
-        进入检索
-      </RouterLink>
+      <div class="toolbar-actions">
+        <RouterLink class="ghost-button" to="/realtime">实时检索</RouterLink>
+        <RouterLink class="primary-button" :to="{ name: 'search', query: latestDate ? { query_date: latestDate } : {} }">
+          本地检索
+        </RouterLink>
+      </div>
     </section>
 
     <section class="summary-grid" v-if="!isLoading && data">

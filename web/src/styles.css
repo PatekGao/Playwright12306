@@ -220,6 +220,73 @@ select {
   color: #1d2b44;
 }
 
+.filters-grid .field-disabled,
+.filters-grid input:disabled,
+.filters-grid select:disabled {
+  background: rgba(237, 241, 246, 0.7);
+  color: #8a97ab;
+  cursor: not-allowed;
+}
+
+.realtime-filters-grid {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-areas:
+    "mode-date mode-date mode-query mode-query mode-scope mode-scope"
+    "date-single date-single date-from date-from date-to date-to"
+    "station-from station-from station-from station-to station-to station-to"
+    "train-code train-code train-code train-class train-class train-class";
+}
+
+.field-mode-date {
+  grid-area: mode-date;
+}
+
+.field-mode-query {
+  grid-area: mode-query;
+}
+
+.field-mode-scope {
+  grid-area: mode-scope;
+}
+
+.field-date-single {
+  grid-area: date-single;
+}
+
+.field-date-from {
+  grid-area: date-from;
+}
+
+.field-date-to {
+  grid-area: date-to;
+}
+
+.field-station-from {
+  grid-area: station-from;
+}
+
+.field-station-to {
+  grid-area: station-to;
+}
+
+.field-train-code {
+  grid-area: train-code;
+}
+
+.field-train-class {
+  grid-area: train-class;
+}
+
+.hint-line,
+.error-line {
+  margin: 14px 0 0;
+  color: #5d6b82;
+}
+
+.error-line {
+  color: #b23a48;
+}
+
 .results-panel {
   overflow: hidden;
 }
@@ -275,6 +342,10 @@ select {
   margin-left: 6px;
 }
 
+.ghost-button.active {
+  background: rgba(31, 42, 65, 0.12);
+}
+
 .empty-row {
   color: #61718b;
   text-align: center;
@@ -289,6 +360,9 @@ select {
   position: sticky;
   top: 94px;
   min-height: calc(100vh - 130px);
+  max-height: calc(100vh - 130px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .drawer-close {
@@ -372,6 +446,40 @@ select {
   color: #54657e;
 }
 
+.event-list {
+  margin: 12px 0 0;
+  padding-left: 18px;
+}
+
+.failure-grid,
+.daily-results {
+  display: grid;
+  gap: 16px;
+}
+
+.failure-card,
+.daily-card {
+  padding: 16px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(166, 181, 200, 0.16);
+}
+
+.failure-card p,
+.failure-card small,
+.daily-card-header p {
+  margin: 6px 0 0;
+  color: #64758f;
+}
+
+.daily-card-header {
+  margin-bottom: 12px;
+}
+
+.daily-card-header h3 {
+  margin: 0;
+}
+
 .drawer-fade-enter-active,
 .drawer-fade-leave-active {
   transition: opacity 180ms ease, transform 180ms ease;
@@ -400,6 +508,18 @@ select {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .realtime-filters-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-areas:
+      "mode-date mode-query"
+      "mode-scope mode-scope"
+      "date-single date-single"
+      "date-from date-to"
+      "station-from station-from"
+      "station-to station-to"
+      "train-code train-class";
+  }
+
   .search-topbar {
     position: static;
     flex-direction: column;
@@ -424,9 +544,24 @@ select {
   }
 
   .filters-grid,
+  .realtime-filters-grid,
   .detail-grid,
   .price-grid {
     grid-template-columns: 1fr;
+  }
+
+  .realtime-filters-grid {
+    grid-template-areas:
+      "mode-date"
+      "mode-query"
+      "mode-scope"
+      "date-single"
+      "date-from"
+      "date-to"
+      "station-from"
+      "station-to"
+      "train-code"
+      "train-class";
   }
 
   .toolbar-actions {

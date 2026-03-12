@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from "vue-router";
 
 import OverviewView from "@/views/OverviewView.vue";
+import RealtimeView from "@/views/RealtimeView.vue";
 import SearchView from "@/views/SearchView.vue";
 
 export const router = createRouter({
@@ -15,6 +16,11 @@ export const router = createRouter({
       path: "/search",
       name: "search",
       component: SearchView,
+    },
+    {
+      path: "/realtime",
+      name: "realtime",
+      component: RealtimeView,
     },
   ],
 });
