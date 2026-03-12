@@ -28,6 +28,7 @@
 - 不保证 `sale_status`、`can_web_buy`、`seat_inventory_json` 全量可用
 - 不包含 Playwright 浏览器态获取、验证码处理、登录态管理
 - 实时模式不保证绕过 12306 风控；若上游返回 HTML 错页或异常结构，会作为部分失败返回
+- 城市对模式当前采用 `宽松城市对`，速度更快，但覆盖面会比全站点组合更保守
 
 ## 项目结构
 
@@ -169,6 +170,7 @@ npm run build
 ```bash
 python3 scripts/query_realtime_tickets.py \
   --date 2026-03-18 \
+  --query-scope station \
   --from-station 杭州东 \
   --to-station 上海虹桥 \
   --detail
@@ -180,8 +182,9 @@ python3 scripts/query_realtime_tickets.py \
 python3 scripts/query_realtime_tickets.py \
   --date-from 2026-03-18 \
   --date-to 2026-03-20 \
-  --from-station 杭州东 \
-  --to-station 上海虹桥 \
+  --query-scope city \
+  --from-station 上海 \
+  --to-station 北京 \
   --format json
 ```
 
@@ -190,13 +193,29 @@ python3 scripts/query_realtime_tickets.py \
 ```bash
 python3 scripts/query_realtime_tickets.py \
   --date 2026-03-18 \
+  --query-scope station \
   --from-station 济南西 \
   --train-code G1 \
   --detail
 ```
 
+城市对宽松查询：
+
+```bash
+python3 scripts/query_realtime_tickets.py \
+  --date 2026-03-18 \
+  --query-scope city \
+  --from-station 杭州东 \
+  --to-station 上海虹桥 \
+  --detail
+```
+
 注意：
-- 双头区间模式返回准确区间价格与余票
+- `--query-scope station` 表示精确站点匹配
+- `--query-scope city` 表示城市级宽松匹配
+- 双头区间模式返回区间价格与余票
+- 站点对模式只保留精确站点命中的结果
+- 城市对模式会先查城市主站，再保留命中的真实站点区间
 - 单头模式只返回时刻与经停上下文，不返回票价与余票
 - 日期跨度最大 `7` 天
 
@@ -226,10 +245,16 @@ curl -X POST http://127.0.0.1:8000/api/realtime/jobs \
   -H 'Content-Type: application/json' \
   -d '{
     "date":"2026-03-18",
+    "query_scope":"station",
     "from_station_name":"杭州东",
     "to_station_name":"上海虹桥"
   }'
 ```
+
+说明：
+- `GET /api/realtime/meta/stations` 会同时返回 `stations` 和 `cities`
+- `query_scope=station` 时，双头区间按精确站点过滤
+- `query_scope=city` 时，双头区间按宽松城市对过滤，但结果表仍展示真实命中的站点区间
 
 ### 实时前端
 
@@ -241,6 +266,46 @@ curl -X POST http://127.0.0.1:8000/api/realtime/jobs \
 - `python3 scripts/run_query_api.py` 会自动挂载 `web/dist`
 - 同一个 FastAPI 进程可同时提供 API 和静态前端
 - 如果服务监听 `0.0.0.0`，局域网设备可以直接访问
+
+实时前端当前支持：
+- `站点对 / 城市对` 两种匹配范围
+- `单日 / 日期范围` 两种日期模式
+- SSE 进度流
+- 按天明细 / 按车次聚合两种结果视图
+- 详情抽屉查看停站、价格与余票
+
+## 内网访问
+
+如果你希望同一局域网内的其他设备访问页面，请这样启动：
+
+```bash
+python3 scripts/run_query_api.py \
+  --db-path data/train_search.db \
+  --host 0.0.0.0 \
+  --port 8000
+```
+
+然后使用这台机器的局域网 IP 打开，例如：
+
+```text
+http://172.25.133.167:8000/
+http://172.25.133.167:8000/realtime
+```
+
+注意：
+- 其他设备和服务所在机器必须在同一局域网
+- 若页面能打开但查询时报 `failed to fetch`，通常是浏览器缓存了旧版前端，请强制刷新
+- 若局域网设备完全打不开，多半是系统防火墙拦了 `8000` 端口
+
+## 导出说明
+
+当前 CSV 导出已经做了两项兼容处理：
+- 编码使用 `UTF-8-SIG`，Excel 直接打开中文通常不会乱码
+- 文件名会尽量带上 `日期 + 查询模式 + 主要筛选条件`，不再是随机字符串
+
+例如：
+- `realtime_2026-03-18_城市对_区间_上海-北京_D18.csv`
+- `trains_2026-03-18_北京-上海_G5.csv`
 
 ## 输出结果
 
