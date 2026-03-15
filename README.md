@@ -219,6 +219,38 @@ python3 scripts/query_realtime_tickets.py \
 - 单头模式只返回时刻与经停上下文，不返回票价与余票
 - 日期跨度最大 `7` 天
 
+### 批量实时 CLI
+
+如果你想一次查询很多个城市对或站点对，可以使用批量脚本：
+
+```bash
+python3 scripts/batch_query_realtime_tickets.py \
+  --input-xlsx docs/examples/realtime_batch_template.xlsx \
+  --output-dir output/realtime-batch-demo
+```
+
+批量脚本会：
+- 从 Excel 的 `queries` 工作表逐行读取请求
+- 为每一行调用现有实时查询逻辑
+- 输出 `batch_summary.csv`、`batch_summary.xlsx` 和 `details/*.json`
+
+相关文件：
+- 使用说明：`docs/batch-realtime-cli.md`
+- Excel 示例：`docs/examples/realtime_batch_template.xlsx`
+
+### 实时详情导出 XLSX
+
+如果你已经得到 `details/*.json`，可以继续把它们转成 Excel：
+
+```bash
+python3 scripts/export_realtime_details_xlsx.py \
+  --input output/realtime_batch_Shanghai/details \
+  --output-dir output/realtime_detail_xlsx
+```
+
+相关文件：
+- 使用说明：`docs/realtime-details-xlsx.md`
+
 ### 实时 API
 
 启动 API 服务：
